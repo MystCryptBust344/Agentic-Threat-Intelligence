@@ -1,0 +1,26 @@
+# Phase 1: Dual-Layer Temporal Knowledge Graph (TKG) Construction with Uncertainty Quantification
+
+## 1. Abstract / Executive Summary
+- End-to-end extraction from unstructured CTI + structured MITRE ATT&CK
+- Dual-layer graph storage (in-memory streaming + persistent append-only)
+- Continuous temporal decay (λ=0.01/hour) prioritization mechanism
+
+## 2. Architecture & Design
+- Triplet Extractor: JE_BERT_CRF + heuristic fallback
+- Ingestion Pipeline: `ingestion_pipeline.py` processing TIRE + MITRE sources
+- Store: `InMemoryGraphStore` + `JSONLGraphStore` 
+
+## 3. Discovery & Evaluation (FINAL METRICS)
+- **Scale:** 
+  - 9,417 unique nodes
+  - 41,646 post-merge edges
+  - 21,475 TIRE edges (51.6%) and 20,171 MITRE edges (48.4%)
+- **Data Integrity:** 0 text overlap in text-dedup splits (val_acc=97.0%)
+- **Schema Determinism:** 211 / 211 type pairs (100.0%) map deterministically to a single relation. The Unknown->Unknown collision has been fully resolved.
+- **Merge Safety Note:** Duplicate observations are merged by (source_id, target_id) keys. Empirical validation confirms 0 out of 41,646 node pairs carry conflicting relation types, meaning the last-write-wins merge strategy yields zero information loss on this dataset.
+- **Test Suite:** 25/25 automated checks passing, including isolated End-to-End Ingestion tests.
+- **Temporal UQ:** Demonstrated and validated that older intelligence decays correctly while maintaining high confidence for recent, corroborated intelligence.
+
+## 4. Next Steps (Phase 2 Integration)
+- Connect PyG snapshot (`tkg_pyg_snapshot.pt`) to TGN (Temporal Graph Networks)
+- Edge features `[c_nlp, threshold_weight, effective_confidence]` are pre-calculated for TGN ingestion.

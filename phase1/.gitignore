@@ -1,0 +1,20 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Large model weights (>100MB limit on GitHub)
+models/*.pt
+*.bin
+*.onnx
+
+# Environment & Virtualenvs
+.venv/
+env/
+venv/
+ENV/
+
+# Output logs & temporary files
+*.log
+.DS_Store
+phase1_output/

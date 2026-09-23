@@ -1,0 +1,18 @@
+{
+  "affiliatedWith": 0,
+  "associatedWith": 1,
+  "contains": 2,
+  "hasAttackLocation": 3,
+  "hasAttackTime": 4,
+  "hasLocation": 5,
+  "hasVulnerability": 6,
+  "identifiedBy": 7,
+  "identifies": 8,
+  "monitoredBy": 9,
+  "monitors": 10,
+  "noRelation": 11,
+  "targetedBy": 12,
+  "targets": 13,
+  "usedBy": 14,
+  "uses": 15
+}

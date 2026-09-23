@@ -1,0 +1,11 @@
+# Byte-compiled / optimized files
+__pycache__/
+*.py[cod]
+
+# OS metadata
+.DS_Store
+
+# Virtual environment
+.venv/
+env/
+venv/

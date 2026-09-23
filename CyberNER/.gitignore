@@ -1,0 +1,63 @@
+# Ignorer les dossiers de données et sorties volumineuses
+datasets/
+logs/
+logs_cyberner/
+output_dups/
+outputs/
+outputs_cyberner/
+outputs_cyberner_coverage/
+outputs_cyberner_dedup_coverage/
+
+# Ignorer les fichiers spécifiques
+dataset/final_ner.csv
+notebooks/version.ipynb
+
+# Ignorer les chemins absolus spécifiques
+/home/yasir.ech-chammakhy/lustre/cyber_cc-lcbfvhtc9qm/users/yasir.ech-chammakhy/CyberNER/dataset/final_ner.csv
+/home/yasir.ech-chammakhy/lustre/cyber_cc-lcbfvhtc9qm/users/yasir.ech-chammakhy/CyberNER/notebooks/version.ipynb
+
+# Ignorer les fichiers temporaires
+*.tmp
+*.temp
+*.log
+*.bak
+
+# Ignorer les environnements virtuels
+venv/
+*-venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Ignorer les fichiers spécifiques à l'environnement
+.DS_Store
+.env
+.idea/
+.vscode/
+
+# Ignorer les fichiers volumineux
+*.zip
+*.tar.gz
+*.model
+*.bin
+*.h5
+*.pkl
+*.npy
+
+# Ignorer les checkpoints et modèles
+checkpoints/
+models/
+*.pt
+*.ckpt
+
+# Ignorer les fichiers de données volumineuses
+*.csv
+*.json
+*.jsonl
+*.txt
+!README.txt
+!requirements.txt
+
+# Exceptions pour les fichiers importants
+!scripts/*.py
+!scripts/*.sh
