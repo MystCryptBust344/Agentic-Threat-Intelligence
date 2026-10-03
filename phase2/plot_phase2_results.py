@@ -53,10 +53,11 @@ LR_SCHEDULE = [
     1.29e-4, 7.40e-5, 3.34e-5, 8.41e-6, 0.00e+0,
 ]
 
-ZD_COS_SIM     = [0.772, 0.521, 0.682]
-ZD_ESC_RATE    = [0.123, 0.395, 0.000]
-ZD_LINK_SCORE  = [0.8676, 0.7558, 0.0021]
-TIER1_HITS_TEXT = "Hits@10 = 0.9800\n[PASS]  (target >= 0.70)"
+# Locked seeded-run defaults (zero_day_test.py with per-function seeds 42/43/44)
+ZD_COS_SIM     = [0.766, 0.483, 0.678]
+ZD_ESC_RATE    = [0.192, 0.460, 0.000]
+ZD_LINK_SCORE  = [0.8357, 0.7218, 0.0019]
+TIER1_HITS_TEXT = "Hits@10 = 0.9900\n[PASS]  (target >= 0.70)"
 
 # Track best epoch for dynamic annotation
 BEST_EPOCH = 2  # default
@@ -195,8 +196,9 @@ FINAL_LOSS  = TRAIN_LOSS[-1] if TRAIN_LOSS else 0.065
 fig, axes = plt.subplots(1, 2, figsize=(14, 5))
 fig.patch.set_facecolor(DARK_BG)
 fig.suptitle(
-    f"Phase 2A — ConfidenceWeightedTGN Training ({MAX_EPOCH} Epochs, Real TIRE+MITRE Data)",
-    fontsize=14, color=TEXT_COLOR, y=1.01
+    f"Phase 2A — ConfidenceWeightedTGN: Trained to convergence ({MAX_EPOCH} epochs); "
+    f"best-generalising checkpoint (epoch {BEST_EPOCH}) selected via validation loss",
+    fontsize=12, color=TEXT_COLOR, y=1.01
 )
 
 # — Panel A: Loss —
@@ -220,7 +222,7 @@ ax.annotate(
 )
 ax.set_xlabel("Epoch")
 ax.set_ylabel("BCE Loss")
-ax.set_title("Loss Curves")
+ax.set_title("Loss Curves — Train drops; Val diverges (expected overfitting pattern)")
 ax.legend(loc="upper right")
 ax.grid(True, alpha=0.4)
 ax.set_xlim(1, MAX_EPOCH)   # ← dynamic, not hardcoded 20
@@ -265,7 +267,7 @@ ax2.annotate(
 )
 ax2.set_xlabel("Epoch")
 ax2.set_ylabel("Accuracy (%)")
-ax2.set_title("Training Accuracy & LR Schedule")
+ax2.set_title("Training Accuracy & LR Schedule (checkpoint = epoch 2, lowest val loss)")
 ax2.set_xlim(1, MAX_EPOCH)   # ← dynamic, not hardcoded 20
 ax2.set_ylim(60, 102)
 ax2.grid(True, alpha=0.4)
@@ -287,8 +289,11 @@ print(f"  Saved: {out1}")
 
 fig, axes = plt.subplots(1, 3, figsize=(15, 5))
 fig.patch.set_facecolor(DARK_BG)
-fig.suptitle("Phase 2B — Hybrid Zero-Day Evaluation (Tier 2: Structure-Novelty Spectrum)",
-             fontsize=13, color=TEXT_COLOR, y=1.01)
+fig.suptitle(
+    "Phase 2B — Hybrid Zero-Day Evaluation (Tier 2: Structure-Novelty Spectrum) "
+    "[Seeded: reproducible across re-runs]",
+    fontsize=12, color=TEXT_COLOR, y=1.01
+)
 
 x = np.arange(len(ZD_LEVELS))
 BAR_W = 0.55
@@ -478,9 +483,11 @@ props = dict(boxstyle="round,pad=0.7", facecolor=ACCENT2, edgecolor=ACCENT2, alp
 ax.text(0.72, 0.72, TIER1_HITS_TEXT, transform=ax.transAxes, fontsize=13,
         ha="center", va="center", color=ACCENT2, fontweight="bold", bbox=props)
 
-ax.set_title("Phase 2B Tier 1 — Ransomware Label-Novelty Test\n"
-             "(Ransomware edges masked at inference; evaluated on held-out ransomware edges)",
-             fontsize=11)
+ax.set_title(
+    "Phase 2B Tier 1 — Ransomware Label-Novelty Test\n"
+    "(Ransomware edges masked at inference — model never saw these edges during encoding)",
+    fontsize=11
+)
 ax.set_ylabel("Count")
 ax.set_ylim(0, 900)
 ax.grid(True, axis="y", alpha=0.4)

@@ -1,0 +1,37 @@
+\relax 
+\providecommand\hyper@newdestlabel[2]{}
+\providecommand\HyField@AuxAddToFields[1]{}
+\providecommand\HyField@AuxAddToCoFields[2]{}
+\@writefile{toc}{\contentsline {section}{\numberline {1}Introduction \& Research Motivation}{2}{section.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.1}Background \& The Operational Challenge}{2}{subsection.1.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.2}Two-Phase Architectural Solution}{2}{subsection.1.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {2}Phase 1: Relation Extraction, UQ \& TKG Construction}{2}{section.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.1}Dataset Description \& The Data Leakage Fix}{2}{subsection.2.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.2}NLP Relation Extractor Classifier}{3}{subsection.2.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.3}Uncertainty Quantification (UQ) \& 4-Tier Policy Gate}{3}{subsection.2.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.4}Analysis of Phase 1 Confidence Distribution (Figure \ref {fig:fig3_cnlp})}{3}{subsection.2.4}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces Phase 1 Ingestion Data Quality: Distribution of extraction confidence scores ($c_{\text  {nlp}}$) across 37,598 CTI triplets, showing counts and percentage breakdowns across the four UQ policy buckets.}}{4}{figure.1}\protected@file@percent }
+\newlabel{fig:fig3_cnlp}{{1}{4}{Phase 1 Ingestion Data Quality: Distribution of extraction confidence scores ($c_{\text {nlp}}$) across 37,598 CTI triplets, showing counts and percentage breakdowns across the four UQ policy buckets}{figure.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.5}Dual-Layer TKG Store, Temporal Decay \& PyG Export}{4}{subsection.2.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {3}Phase 2: Confidence-Weighted TGN Architecture \& Training}{5}{section.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.1}Neural Component Architecture}{5}{subsection.3.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.2}Analysis of Policy Multiplier Breakdown (Figure \ref {fig:fig4_thresholds})}{5}{subsection.3.2}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Phase 2A Policy Multiplier Breakdown: Edge count and percentage composition of the 41,646 TKG edges categorized by assigned \texttt  {threshold\_weight} tier.}}{5}{figure.2}\protected@file@percent }
+\newlabel{fig:fig4_thresholds}{{2}{5}{Phase 2A Policy Multiplier Breakdown: Edge count and percentage composition of the 41,646 TKG edges categorized by assigned \texttt {threshold\_weight} tier}{figure.2}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3}Analysis of Training Curves \& Optimization Dynamics (Figure \ref {fig:fig1_training})}{6}{subsection.3.3}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces Phase 2A ConfidenceWeightedTGN Training Dynamics: Loss convergence and val-loss divergence (Panel A — train loss $\downarrow $, val loss $\uparrow $, expected overfitting pattern on asymmetric graph data), and Training Accuracy alongside the Linear Warm-Up + Cosine Learning Rate Schedule (Panel B). \textbf  {Best-generalising checkpoint selected at epoch 2} via lowest validation loss (standard MLOps early-stopping); all zero-day evaluations use this checkpoint.}}{6}{figure.3}\protected@file@percent }
+\newlabel{fig:fig1_training}{{3}{6}{Phase 2A ConfidenceWeightedTGN Training Dynamics: Loss convergence and val-loss divergence (Panel A — train loss $\downarrow $, val loss $\uparrow $, expected overfitting pattern on asymmetric graph data), and Training Accuracy alongside the Linear Warm-Up + Cosine Learning Rate Schedule (Panel B). \textbf {Best-generalising checkpoint selected at epoch 2} via lowest validation loss (standard MLOps early-stopping); all zero-day evaluations use this checkpoint}{figure.3}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {4}Phase 2B: Hybrid Zero-Day Inductive Evaluation Protocol}{6}{section.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.1}Tier 1: Label-Novelty Test (Ransomware Node Masking)}{6}{subsection.4.1}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces Phase 2B Tier 1 Ransomware Label-Novelty Masking Test: All ransomware edges are \textbf  {masked at inference} (the model never processes them during graph encoding). The held-out edges are then ranked against random negatives to compute Hits@10. Hits@10 = 0.9900 (target $\ge 0.70$).}}{7}{figure.4}\protected@file@percent }
+\newlabel{fig:fig5_ransomware}{{4}{7}{Phase 2B Tier 1 Ransomware Label-Novelty Masking Test: All ransomware edges are \textbf {masked at inference} (the model never processes them during graph encoding). The held-out edges are then ranked against random negatives to compute Hits@10. Hits@10 = 0.9900 (target $\ge 0.70$)}{figure.4}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.2}Tier 2: Structure-Novelty Test (3-Level Graded Spectrum)}{7}{subsection.4.2}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {5}{\ignorespaces Phase 2B Tier 2 Hybrid Zero-Day Evaluation (reproducible: seeded \texttt  {torch.manual\_seed(42/43/44)} per level): Cosine similarity to malicious centroids, OOD escalation rates, and mean link scores across 3 graded structural novelty levels. Numbers are stable across re-runs.}}{7}{figure.5}\protected@file@percent }
+\newlabel{fig:fig2_tier2}{{5}{7}{Phase 2B Tier 2 Hybrid Zero-Day Evaluation (reproducible: seeded \texttt {torch.manual\_seed(42/43/44)} per level): Cosine similarity to malicious centroids, OOD escalation rates, and mean link scores across 3 graded structural novelty levels. Numbers are stable across re-runs}{figure.5}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.3}Tier 3: Structural Divergence Escalation}{8}{subsection.4.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {5}Summary of System Metrics \& Performance Verification}{8}{section.5}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {1}{\ignorespaces Comprehensive Performance Benchmarks across Phase 1 and Phase 2 Modules.}}{8}{table.1}\protected@file@percent }
+\newlabel{tab:system_metrics}{{1}{8}{Comprehensive Performance Benchmarks across Phase 1 and Phase 2 Modules}{table.1}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {6}Conclusion \& Summary of Contributions}{8}{section.6}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.1}Key Technical Contributions}{9}{subsection.6.1}\protected@file@percent }
+\gdef \@abspage@last{10}

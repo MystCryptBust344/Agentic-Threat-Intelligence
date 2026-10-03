@@ -238,7 +238,10 @@ def run_label_novelty_test(model: ConfidenceWeightedTGN,
         print("  [SKIP] No ransomware edges were masked (no ransomware keywords matched).")
         return {"hits_at_k": None, "n_ransomware_edges": 0, "passed": None}
 
-    # Use a random sample of held-out ransomware edges as positives
+    # Use a random sample of held-out ransomware edges as positives.
+    # Fixed seed here so Tier-1 negative sampling is reproducible and does NOT
+    # pollute the RNG state consumed by Tier-2 functions downstream.
+    torch.manual_seed(42)
     rw_set    = set(ransomware_ids)
     rw_edges  = []
     for i in range(n_full):
@@ -445,7 +448,7 @@ def run_structure_novelty_test(model:             ConfidenceWeightedTGN,
     if mitre_chains:
         level1 = _score_test_subgraph(
             model, h_train, mitre_chains, malicious_centroid,
-            num_relations, device, level="Level 1 (MITRE chains)",
+            num_relations, device, level="Level 1 (MITRE chains)", seed=42,
         )
         results["level1_mitre"] = level1
 
@@ -456,7 +459,7 @@ def run_structure_novelty_test(model:             ConfidenceWeightedTGN,
                                              full_threshold_w, num_nodes)
     level2 = _score_test_subgraph(
         model, h_train, cyber_battle, malicious_centroid,
-        num_relations, device, level="Level 2 (CyberBattleSim)",
+        num_relations, device, level="Level 2 (CyberBattleSim)", seed=43,
     )
     results["level2_cyberbattle"] = level2
 
@@ -475,7 +478,7 @@ def run_structure_novelty_test(model:             ConfidenceWeightedTGN,
     }
     level3 = _score_test_subgraph(
         model, h_train, adv_data, malicious_centroid,
-        num_relations, device, level="Level 3 (Synthetic adversarial)",
+        num_relations, device, level="Level 3 (Synthetic adversarial)", seed=44,
     )
     results["level3_adversarial"] = level3
 
@@ -490,8 +493,11 @@ def _simulate_cyberbattlesim(edge_index: Tensor, edge_attr: Tensor,
     Simulate CyberBattleSim trajectories by perturbing a subset of training edges.
     Adds Gaussian noise (sigma=perturbation) to edge features and remaps 20% of
     endpoints to random new nodes (partial structure novelty).
+
+    Self-contained seed (42) ensures identical output regardless of call order
+    or how many random calls Tier-1 evaluation consumed before this point.
     """
-    torch.manual_seed(42)
+    torch.manual_seed(42)  # self-contained — reproducible independent of call order
     n = min(200, edge_index.shape[1])
     idx = torch.randperm(edge_index.shape[1])[:n]
     ei  = edge_index[:, idx].clone()
@@ -521,10 +527,13 @@ def _score_test_subgraph(model:              ConfidenceWeightedTGN,
                           malicious_centroid: Tensor,
                           num_relations:     int,
                           device:            torch.device,
-                          level:             str) -> Dict:
+                          level:             str,
+                          seed:              int = 42) -> Dict:
     """
     Score a test subgraph and compute cosine similarity to known malicious cluster.
     Flags nodes with cosine similarity < OOD_COSINE_THRESHOLD for human review.
+
+    `seed` pins the relation-ID sampling so scores are identical across re-runs.
     """
     ei  = subgraph["edge_index"]
     ea  = subgraph["edge_attr"]
@@ -538,6 +547,8 @@ def _score_test_subgraph(model:              ConfidenceWeightedTGN,
     # Get embeddings for src/dst nodes (using training embeddings for inductive)
     src_nodes = ei[0].clamp(0, model.num_nodes - 1).to(device)
     dst_nodes = ei[1].clamp(0, model.num_nodes - 1).to(device)
+    # Pin relation-ID sampling so scores are reproducible across re-runs.
+    torch.manual_seed(seed)
     rel_ids   = torch.randint(0, num_relations, (n,), device=device)
 
     h_src = h_train[src_nodes]

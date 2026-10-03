@@ -1,6 +1,6 @@
 {
   "tier1": {
-    "hits_at_k": 0.985,
+    "hits_at_k": 0.99,
     "n_ransomware_nodes": 56,
     "n_ransomware_edges": 754,
     "n_evaluated": 200,
@@ -10,7 +10,7 @@
   "tier2": {
     "level1_mitre": {
       "n_edges": 73,
-      "mean_link_score": 0.833209753036499,
+      "mean_link_score": 0.8357208967208862,
       "mean_cosine_sim": 0.7655786871910095,
       "n_ood_flagged": 14,
       "escalation_rate": 0.1917808219178082,
@@ -19,7 +19,7 @@
     },
     "level2_cyberbattle": {
       "n_edges": 200,
-      "mean_link_score": 0.722585141658783,
+      "mean_link_score": 0.7217733860015869,
       "mean_cosine_sim": 0.48303112387657166,
       "n_ood_flagged": 92,
       "escalation_rate": 0.46,
@@ -28,7 +28,7 @@
     },
     "level3_adversarial": {
       "n_edges": 100,
-      "mean_link_score": 0.002594907768070698,
+      "mean_link_score": 0.001944802817888558,
       "mean_cosine_sim": 0.6780277490615845,
       "n_ood_flagged": 0,
       "escalation_rate": 0.0,

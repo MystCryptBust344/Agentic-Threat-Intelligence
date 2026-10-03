@@ -1,0 +1,20 @@
+\contentsline {section}{\numberline {1}Introduction \& Research Motivation}{2}{section.1}%
+\contentsline {subsection}{\numberline {1.1}Background \& The Operational Challenge}{2}{subsection.1.1}%
+\contentsline {subsection}{\numberline {1.2}Two-Phase Architectural Solution}{2}{subsection.1.2}%
+\contentsline {section}{\numberline {2}Phase 1: Relation Extraction, UQ \& TKG Construction}{2}{section.2}%
+\contentsline {subsection}{\numberline {2.1}Dataset Description \& The Data Leakage Fix}{2}{subsection.2.1}%
+\contentsline {subsection}{\numberline {2.2}NLP Relation Extractor Classifier}{3}{subsection.2.2}%
+\contentsline {subsection}{\numberline {2.3}Uncertainty Quantification (UQ) \& 4-Tier Policy Gate}{3}{subsection.2.3}%
+\contentsline {subsection}{\numberline {2.4}Analysis of Phase 1 Confidence Distribution (Figure \ref {fig:fig3_cnlp})}{3}{subsection.2.4}%
+\contentsline {subsection}{\numberline {2.5}Dual-Layer TKG Store, Temporal Decay \& PyG Export}{4}{subsection.2.5}%
+\contentsline {section}{\numberline {3}Phase 2: Confidence-Weighted TGN Architecture \& Training}{5}{section.3}%
+\contentsline {subsection}{\numberline {3.1}Neural Component Architecture}{5}{subsection.3.1}%
+\contentsline {subsection}{\numberline {3.2}Analysis of Policy Multiplier Breakdown (Figure \ref {fig:fig4_thresholds})}{5}{subsection.3.2}%
+\contentsline {subsection}{\numberline {3.3}Analysis of Training Curves \& Optimization Dynamics (Figure \ref {fig:fig1_training})}{6}{subsection.3.3}%
+\contentsline {section}{\numberline {4}Phase 2B: Hybrid Zero-Day Inductive Evaluation Protocol}{6}{section.4}%
+\contentsline {subsection}{\numberline {4.1}Tier 1: Label-Novelty Test (Ransomware Node Masking)}{6}{subsection.4.1}%
+\contentsline {subsection}{\numberline {4.2}Tier 2: Structure-Novelty Test (3-Level Graded Spectrum)}{7}{subsection.4.2}%
+\contentsline {subsection}{\numberline {4.3}Tier 3: Structural Divergence Escalation}{8}{subsection.4.3}%
+\contentsline {section}{\numberline {5}Summary of System Metrics \& Performance Verification}{8}{section.5}%
+\contentsline {section}{\numberline {6}Conclusion \& Summary of Contributions}{8}{section.6}%
+\contentsline {subsection}{\numberline {6.1}Key Technical Contributions}{9}{subsection.6.1}%
