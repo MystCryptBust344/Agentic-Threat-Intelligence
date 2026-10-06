@@ -1,8 +1,8 @@
 {
   "tier1": {
-    "hits_at_k": 0.99,
+    "hits_at_k": 0.98,
     "n_ransomware_nodes": 56,
-    "n_ransomware_edges": 754,
+    "n_ransomware_edges": 756,
     "n_evaluated": 200,
     "passed": true,
     "k": 10
@@ -10,30 +10,30 @@
   "tier2": {
     "level1_mitre": {
       "n_edges": 73,
-      "mean_link_score": 0.8357208967208862,
-      "mean_cosine_sim": 0.7655786871910095,
-      "n_ood_flagged": 14,
-      "escalation_rate": 0.1917808219178082,
+      "mean_link_score": 0.5181387066841125,
+      "mean_cosine_sim": 0.6467443704605103,
+      "n_ood_flagged": 27,
+      "escalation_rate": 0.3698630136986301,
       "ood_threshold": 0.4,
       "description": "Historical MITRE ATT&CK attack chains (Level 1: known structure)"
     },
     "level2_cyberbattle": {
       "n_edges": 200,
-      "mean_link_score": 0.7217733860015869,
-      "mean_cosine_sim": 0.48303112387657166,
-      "n_ood_flagged": 92,
-      "escalation_rate": 0.46,
+      "mean_link_score": 0.6274722814559937,
+      "mean_cosine_sim": 0.35014569759368896,
+      "n_ood_flagged": 135,
+      "escalation_rate": 0.675,
       "ood_threshold": 0.4,
       "description": "CyberBattleSim trajectories (Level 2: partial novelty)"
     },
     "level3_adversarial": {
       "n_edges": 100,
-      "mean_link_score": 0.001944802817888558,
-      "mean_cosine_sim": 0.6780277490615845,
+      "mean_link_score": 0.08016553521156311,
+      "mean_cosine_sim": 0.4443455636501312,
       "n_ood_flagged": 0,
       "escalation_rate": 0.0,
       "ood_threshold": 0.4,
-      "description": "Synthetic adversarial subgraph (FLAGGED, untrusted, uncorroborated)"
+      "description": "Synthetic adversarial subgraph (FLAGGED, untrusted, uncorroborated) [proper inductive: OOD proxy]"
     }
   }
 }
