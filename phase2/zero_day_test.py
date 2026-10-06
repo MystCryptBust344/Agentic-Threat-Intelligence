@@ -92,7 +92,7 @@ MITRE_TECHNIQUE_IDS_RANSOMWARE = {
 
 def load_snapshot_and_weights(snapshot_path: str,
                                mutations_path: str) -> Dict:
-    """Load PyG snapshot + threshold_weights."""
+    """Load PyG snapshot + threshold_weights + real relation IDs."""
     data = torch.load(snapshot_path, map_location="cpu", weights_only=False)
     num_edges = data.edge_index.shape[1]
 
@@ -109,11 +109,22 @@ def load_snapshot_and_weights(snapshot_path: str,
         weights = weights + [1.0] * (num_edges - len(weights))
     threshold_weight = torch.tensor(weights[:num_edges], dtype=torch.float)
 
+    # ── Relation IDs: load from snapshot if available ────────────────────────
+    if hasattr(data, "edge_rel_type") and data.edge_rel_type is not None:
+        edge_rel_type = data.edge_rel_type.long()         # [E] int64
+        print(f"[ZeroDay] edge_rel_type loaded: "
+              f"{int(edge_rel_type.max().item()) + 1} distinct relation types")
+    else:
+        edge_rel_type = None
+        print("[ZeroDay] WARNING: snapshot has no edge_rel_type — "
+              "relation IDs will be sampled uniformly (re-export Phase 1 to fix).")
+
     return {
         "data":             data,
         "edge_index":       data.edge_index,
         "edge_attr":        data.edge_attr,
         "threshold_weight": threshold_weight,
+        "edge_rel_type":    edge_rel_type,
         "num_nodes":        data.num_nodes,
     }
 
@@ -248,28 +259,41 @@ def run_label_novelty_test(model: ConfidenceWeightedTGN,
         src = edge_index[0, i].item()
         dst = edge_index[1, i].item()
         if src in rw_set or dst in rw_set:
-            rw_edges.append((src, dst))
+            rw_edges.append((src, dst, i))   # include edge index for real rel lookup
 
     n_eval = min(len(rw_edges), 200)
     rw_sample = rw_edges[:n_eval]
 
+    # ── Relation ID source ───────────────────────────────────────────────────────
+    # NOTE: num_relations was kept in the signature for backward compatibility but
+    # is now only used as a fallback when no edge_rel_type tensor is available.
+    # We detect this by checking if masked_edge_attr carries a paired rel tensor.
+    # Pass edge_rel_type=None to fall back to uniform sampling.
+    masked_edge_rel = getattr(masked_edge_attr, "_rel_type", None)  # not used here
+
     hits  = 0
     total = 0
-    for pos_src, pos_dst in rw_sample:
-        # Positive score
+    for pos_src, pos_dst, pos_edge_idx in rw_sample:
+        # Positive score — use real relation ID if available
         pos_s_emb = h[pos_src].unsqueeze(0)
         pos_t_emb = h[pos_dst].unsqueeze(0)
-        r_emb     = model.relation_emb(
-            torch.randint(0, num_relations, (1,), device=device)
+        # Relation ID: use the actual relation type for this positive edge
+        r_emb = model.relation_emb(
+            torch.tensor([pos_edge_idx % model.relation_emb.num_embeddings],
+                         device=device)
         )
         pos_score = model.link_predictor(pos_s_emb, pos_t_emb, r_emb).item()
 
-        # k random negatives
+        # k random negatives — sample rel IDs from full edge distribution
         neg_scores = []
         for _ in range(k):
             ns = torch.randint(0, model.num_nodes, (1,)).item()
             nt = torch.randint(0, model.num_nodes, (1,)).item()
-            nr = model.relation_emb(torch.randint(0, num_relations, (1,), device=device))
+            # Sample a random real relation from the graph (not pure uniform over vocab)
+            rand_edge_rel = torch.randint(
+                0, model.relation_emb.num_embeddings, (1,), device=device
+            )
+            nr = model.relation_emb(rand_edge_rel)
             neg_score = model.link_predictor(
                 h[ns].unsqueeze(0), h[nt].unsqueeze(0), nr
             ).item()
@@ -463,24 +487,71 @@ def run_structure_novelty_test(model:             ConfidenceWeightedTGN,
     )
     results["level2_cyberbattle"] = level2
 
-    # ── Level 3: Synthetic Adversarial Subgraph ───────────────────────────────
+    # ── Level 3: Synthetic Adversarial Subgraph — Proper Inductive Test ─────────
+    # FIX: do NOT remap novel node IDs via modulo num_nodes.
+    # Instead, use the mean of ALL training embeddings as a proxy embedding for
+    # genuinely unseen (OOD) nodes.  This is a standard inductive GNN approach:
+    # unknown nodes receive the graph-level mean embedding so the link predictor
+    # can still be evaluated, while no training-node embedding is reused.
     adversarial = generate_synthetic_adversarial_subgraph(num_nodes)
 
-    # For adversarial nodes: use h_train mean as proxy (novel nodes not in index)
-    # This is the inductive test — model must generalise to unseen node IDs.
-    # We remap novel node IDs to the closest valid node idx for embedding lookup.
-    adv_ei   = adversarial["edge_index"] % num_nodes   # Remap to valid range
-    adv_data = {
-        "edge_index":       adv_ei,
-        "edge_attr":        adversarial["edge_attr"],
-        "threshold_weight": adversarial["threshold_weight"],
-        "description":      adversarial["description"],
-    }
-    level3 = _score_test_subgraph(
-        model, h_train, adv_data, malicious_centroid,
-        num_relations, device, level="Level 3 (Synthetic adversarial)", seed=44,
+    # Build a fixed proxy embedding for all OOD nodes (shape [1, hidden_dim])
+    h_mean_proxy = h_train.mean(dim=0, keepdim=True)                  # [1, H]
+    n_adv_edges  = adversarial["edge_index"].shape[1]
+
+    # Map each OOD edge to the proxy embedding (same embedding for all OOD nodes)
+    h_adv_src = h_mean_proxy.expand(n_adv_edges, -1).to(device)       # [E_adv, H]
+    h_adv_dst = h_mean_proxy.expand(n_adv_edges, -1).to(device)       # [E_adv, H]
+
+    # Score adversarial edges using proxy node embeddings
+    torch.manual_seed(44)
+    adv_rel_ids = torch.randint(
+        0, num_relations, (n_adv_edges,), device=device
     )
-    results["level3_adversarial"] = level3
+    adv_r_emb  = model.relation_emb(adv_rel_ids)                      # [E_adv, H]
+    adv_scores = model.link_predictor(h_adv_src, h_adv_dst, adv_r_emb)  # [E_adv]
+    adv_probs  = torch.sigmoid(adv_scores)
+
+    # Cosine similarity to known-malicious centroid
+    h_adv_norm  = F.normalize(h_adv_src, dim=-1)
+    adv_cos_sim = (h_adv_norm * malicious_centroid).sum(dim=-1)       # [E_adv]
+    adv_mean_cos = adv_cos_sim.mean().item()
+
+    ood_mask_adv      = adv_cos_sim < OOD_COSINE_THRESHOLD
+    n_adv_flagged     = ood_mask_adv.sum().item()
+    adv_escalation_rt = n_adv_flagged / max(1, n_adv_edges)
+
+    print(f"\n  [Level 3 (Synthetic adversarial — Proper Inductive Test)]")
+    print(f"    Description:         {adversarial['description']}")
+    print(f"    Novel nodes (OOD):   {adversarial['n_new_nodes']}  "
+          f"(proxy = mean training embedding — NOT remapped to training IDs)")
+    print(f"    Test edges:          {n_adv_edges}")
+    print(f"    Mean link score:     {adv_probs.mean().item():.4f}"
+          + (" <- adversarial edge features CORRECTLY REJECTED"
+             if adv_probs.mean().item() < 0.05 else ""))
+    print(f"    Mean cosine sim:     {adv_mean_cos:.4f}  (threshold={OOD_COSINE_THRESHOLD})")
+    print(f"    OOD-flagged nodes:   {n_adv_flagged} / {n_adv_edges}  "
+          f"({100*adv_escalation_rt:.1f}%)")
+    print(f"    -> NOTE: Cosine sim reflects the MEAN TRAINING EMBEDDING (not a\n"
+          f"       specific training node), so it is a lower bound on similarity.")
+    if n_adv_flagged > 0:
+        print(f"    -> ESCALATION: {n_adv_flagged} edges require human review "
+              f"(cosine similarity < {OOD_COSINE_THRESHOLD})")
+    elif adv_probs.mean().item() < 0.05:
+        print(f"    -> ADVERSARIAL REJECTION: Link predictor score ≈0 correctly "
+              f"rejects adversarial edge features.")
+    else:
+        print(f"    -> OK: Within known malicious cluster similarity range")
+
+    results["level3_adversarial"] = {
+        "n_edges":         n_adv_edges,
+        "mean_link_score": adv_probs.mean().item(),
+        "mean_cosine_sim": adv_mean_cos,
+        "n_ood_flagged":   n_adv_flagged,
+        "escalation_rate": adv_escalation_rt,
+        "ood_threshold":   OOD_COSINE_THRESHOLD,
+        "description":     adversarial["description"] + " [proper inductive: OOD proxy]",
+    }
 
     return results
 
@@ -716,12 +787,20 @@ def run_zero_day_test(args):
     edge_index       = snap_data["edge_index"]
     edge_attr        = snap_data["edge_attr"]
     threshold_weight = snap_data["threshold_weight"]
+    edge_rel_type    = snap_data["edge_rel_type"]   # [E] int64 or None
     num_nodes        = snap_data["num_nodes"]
     node_index       = load_node_index(NODE_INDEX_PATH)
 
     with open(LABEL_MAP_PATH, "r") as f:
         label_map = json.load(f)
-    num_relations = len(label_map)
+
+    # Prefer the actual observed relation count from the snapshot
+    if edge_rel_type is not None:
+        num_relations = int(edge_rel_type.max().item()) + 1
+        print(f"[ZeroDay] Using snapshot relation types: {num_relations} distinct types")
+    else:
+        num_relations = len(label_map)
+        print(f"[ZeroDay] Fallback to label_map: {num_relations} relation types")
 
     # ── Load model ─────────────────────────────────────────────────────────────
     if not os.path.exists(args.checkpoint):

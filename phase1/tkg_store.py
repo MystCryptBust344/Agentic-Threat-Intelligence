@@ -383,6 +383,14 @@ class InMemoryGraphStore:
           Col 1: source_reputation        — source trust (1.0 for MITRE ground truth, 0.70 for TIRE text)
           Col 2: normalized_corroboration — log1p(obs_count) / log1p(max_obs_count) ∈ [0, 1]
 
+        Additional per-edge tensors (Phase 2 temporal & relation fixes):
+          edge_time     [E]  — unix timestamp (float32) of each edge insertion;
+                               used for chronological train/val split and delta_t.
+          edge_rel_type [E]  — integer relation-type ID derived from TKGEdge.relation;
+                               used in place of random relation IDs during training.
+          relation_vocab     — dict {relation_str: int_id} embedded in the Data object
+                               so Phase 2 can decode relation IDs without label_map.json.
+
         Phase 2 TGN attention uses three structurally independent, orthogonal signals.
         """
         try:
@@ -397,7 +405,16 @@ class InMemoryGraphStore:
             max_obs = max((d.get("obs_count", 1) for _, _, d in self._graph.edges(data=True)), default=1)
             max_log = math.log1p(max_obs) if max_obs > 0 else 1.0
 
-            edge_attrs = []
+            # Build relation vocabulary (deterministic: sorted for reproducibility)
+            all_relations = sorted({
+                d.get("relation", "unknown")
+                for _, _, d in self._graph.edges(data=True)
+            })
+            relation_vocab: Dict[str, int] = {r: i for i, r in enumerate(all_relations)}
+
+            edge_attrs  = []
+            edge_times  = []   # unix timestamps per edge
+            edge_rel_ids = []  # integer relation-type IDs per edge
             for u, v, d in self._graph.edges(data=True):
                 obs = d.get("obs_count", 1)
                 norm_corrob = math.log1p(obs) / max_log if max_log > 0 else 1.0
@@ -406,13 +423,27 @@ class InMemoryGraphStore:
                     d.get("source_reputation", 0.70),  # Col 1: source trust rating [0, 1]
                     norm_corrob,                       # Col 2: normalized corroboration count [0, 1]
                 ])
-            edge_attr = torch.tensor(edge_attrs, dtype=torch.float)
+                # Temporal: use stored timestamp (unix seconds); default to 0.0 if missing
+                edge_times.append(float(d.get("timestamp", 0.0)))
+                # Relation type: map relation string → integer ID
+                rel_str = d.get("relation", "unknown")
+                edge_rel_ids.append(relation_vocab.get(rel_str, 0))
+
+            edge_attr     = torch.tensor(edge_attrs,   dtype=torch.float)
+            edge_time     = torch.tensor(edge_times,   dtype=torch.float)
+            edge_rel_type = torch.tensor(edge_rel_ids, dtype=torch.long)
+
             from torch_geometric.data import Data
-            return Data(
+            pyg_data = Data(
                 edge_index=edge_index,
                 edge_attr=edge_attr,
-                num_nodes=len(node_list)
+                num_nodes=len(node_list),
             )
+            # Attach extra tensors directly (PyG Data supports arbitrary attributes)
+            pyg_data.edge_time     = edge_time
+            pyg_data.edge_rel_type = edge_rel_type
+            pyg_data.relation_vocab = relation_vocab   # {str -> int}
+            return pyg_data
         except Exception as e:
             logger.warning("PyG conversion failed: %s — returning raw NetworkX graph", e)
             return self._graph

@@ -98,7 +98,12 @@ def load_pyg_snapshot(snapshot_path: str):
     Path: /FYP-B9/datasets_1/Final_project/phase1/phase1_output/tkg_pyg_snapshot.pt
 
     Returns:
-        PyG Data object with edge_index [2, E] and edge_attr [E, 3].
+        PyG Data object with:
+          edge_index     [2, E]
+          edge_attr      [E, 3]  (c_nlp, source_rep, norm_corrob)
+          edge_time      [E]     unix timestamps (float32)  — temporal fix
+          edge_rel_type  [E]     relation-type integer IDs  — relation fix
+          num_nodes      int
     """
     if not os.path.exists(snapshot_path):
         raise FileNotFoundError(
@@ -106,8 +111,33 @@ def load_pyg_snapshot(snapshot_path: str):
             f"Ensure datasets_1/Final_project/phase1/phase1_output/tkg_pyg_snapshot.pt exists."
         )
     data = torch.load(snapshot_path, map_location="cpu", weights_only=False)
+
+    E = data.edge_index.shape[1]
+
+    # ── Temporal fix: load real edge timestamps ─────────────────────────────
+    if hasattr(data, "edge_time") and data.edge_time is not None:
+        edge_time = data.edge_time.float()
+        print(f"[Data] edge_time loaded: min={edge_time.min():.0f}  "
+              f"max={edge_time.max():.0f}  (unix seconds)")
+    else:
+        # Old snapshot without timestamps: assign synthetic monotone times
+        # (uniform over 30 days) so the chronological split is still defined.
+        print("[Data] WARNING: snapshot has no edge_time — "
+              "assigning synthetic monotone timestamps (re-export Phase 1 snapshot to fix).")
+        edge_time = torch.linspace(0.0, 30.0 * 24 * 3600, E)
+    data.edge_time = edge_time
+
+    # ── Relation fix: load real relation-type IDs ───────────────────────────
+    if hasattr(data, "edge_rel_type") and data.edge_rel_type is not None:
+        n_rels = int(data.edge_rel_type.max().item()) + 1
+        print(f"[Data] edge_rel_type loaded: {n_rels} distinct relation types")
+    else:
+        print("[Data] WARNING: snapshot has no edge_rel_type — "
+              "relation IDs will be read from label_map.json (re-export Phase 1 to fix).")
+        data.edge_rel_type = None
+
     print(f"[Data] Loaded snapshot: {data.num_nodes} nodes, "
-          f"{data.edge_index.shape[1]} edges, "
+          f"{E} edges, "
           f"edge_attr={data.edge_attr.shape}")
     return data
 
@@ -163,41 +193,70 @@ def load_label_map(label_map_path: str) -> Dict[str, int]:
 
 def build_train_val_split(edge_index: Tensor,
                           edge_attr:  Tensor,
+                          edge_time:  Tensor,
+                          edge_rel_type: Tensor,
                           threshold_weight: Tensor,
                           val_frac: float = 0.15,
-                          seed: int = 42
                           ) -> Tuple[Dict, Dict]:
     """
-    Chronological edge split: first (1-val_frac) edges = train,
-    last val_frac = val. This preserves temporal ordering and
-    prevents future leakage into training (critical for TGN evaluation).
+    Chronological edge split using ACTUAL per-edge timestamps (edge_time).
+
+    Steps:
+      1. Sort all edges by edge_time ascending (oldest → newest).
+      2. First (1-val_frac) in time order = train; last val_frac = val.
+      3. Compute delta_t_hours for each edge relative to the TRAINING set max
+         timestamp, so validation edges are always positive (future events).
+
+    This implements a genuine temporal hold-out: no future information leaks
+    into training, and val edges are strictly after all training edges.
 
     Returns:
-        train_data: {edge_index, edge_attr, threshold_weight}
-        val_data:   {edge_index, edge_attr, threshold_weight}
+        train_data: {edge_index, edge_attr, edge_rel_type, threshold_weight,
+                     delta_t_hours}
+        val_data:   same keys
     """
-    E          = edge_index.shape[1]
-    n_val      = max(1, int(E * val_frac))
-    n_train    = E - n_val
+    E = edge_index.shape[1]
+    n_val   = max(1, int(E * val_frac))
+    n_train = E - n_val
+
+    # Sort edges by timestamp
+    sort_idx = torch.argsort(edge_time)            # ascending order
+
+    edge_index_s       = edge_index[:, sort_idx]
+    edge_attr_s        = edge_attr[sort_idx]
+    edge_rel_type_s    = edge_rel_type[sort_idx]
+    threshold_weight_s = threshold_weight[sort_idx]
+    edge_time_s        = edge_time[sort_idx]
 
     train_mask = torch.zeros(E, dtype=torch.bool)
     train_mask[:n_train] = True
     val_mask   = ~train_mask
 
+    # delta_t_hours: hours since each edge's timestamp relative to NOW (training max)
+    t_max_train = edge_time_s[:n_train].max().item()  # latest training event
+    delta_t_hours_s = (t_max_train - edge_time_s).clamp(min=0.0) / 3600.0
+
     def _split(mask):
         return {
-            "edge_index":       edge_index[:, mask],
-            "edge_attr":        edge_attr[mask],
-            "threshold_weight": threshold_weight[mask],
+            "edge_index":       edge_index_s[:, mask],
+            "edge_attr":        edge_attr_s[mask],
+            "edge_rel_type":    edge_rel_type_s[mask],
+            "threshold_weight": threshold_weight_s[mask],
+            "delta_t_hours":    delta_t_hours_s[mask],
         }
 
     train_data = _split(train_mask)
     val_data   = _split(val_mask)
 
-    print(f"[Split] Train edges: {train_mask.sum():,}  "
-          f"Val edges: {val_mask.sum():,}  "
+    t_train_span = (edge_time_s[:n_train].max() - edge_time_s[:n_train].min()).item() / 3600
+    t_val_lag    = (edge_time_s[n_train:].min() - edge_time_s[:n_train].max()).item() / 3600
+    print(f"[Split] Train edges: {n_train:,}  Val edges: {n_val:,}  "
           f"(val_frac={val_frac:.0%})")
+    print(f"[Split] Train time-span: {t_train_span:.1f} h  "
+          f"Val lag after train: {t_val_lag:+.1f} h  "
+          f"(positive = no temporal leakage)")
     return train_data, val_data
+
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -248,10 +307,11 @@ def train_step(model: ConfidenceWeightedTGN,
                scheduler,
                edge_index:       Tensor,
                edge_attr:        Tensor,
+               edge_rel_type:    Tensor,
                threshold_weight: Tensor,
+               delta_t_hours:    Tensor,
                num_nodes:        int,
                batch_size:       int,
-               num_relations:    int,
                device:           torch.device,
                max_grad_norm:    float = 1.0) -> Dict[str, float]:
     """
@@ -260,6 +320,8 @@ def train_step(model: ConfidenceWeightedTGN,
       - Equal-size random negative (src, dst) pairs
       - BCEWithLogitsLoss
       - Gradient clipping (max_norm=1.0) for attention stability
+      - Real relation IDs from edge_rel_type (not random integers)
+      - Real delta_t_hours per edge for temporal decay
     """
     model.train()
 
@@ -272,26 +334,31 @@ def train_step(model: ConfidenceWeightedTGN,
     pos_src = edge_index[0, pos_idx]
     pos_dst = edge_index[1, pos_idx]
 
-    # Sample relation IDs for positives (uniform random over relation types)
-    # In future: recover from JSONL log to use true relation labels
-    pos_rel = torch.randint(0, num_relations, (batch_size,), device=device)
+    # Use ACTUAL relation IDs from the TKG snapshot (not random)
+    pos_rel     = edge_rel_type[pos_idx].to(device)
+    pos_delta_t = delta_t_hours[pos_idx].to(device)
 
-    # Negative samples
+    # Negative samples — relation IDs sampled from the same distribution as positives
     neg_src, neg_dst = sample_negatives(edge_index, num_nodes, batch_size)
     neg_src = neg_src.to(device)
     neg_dst = neg_dst.to(device)
-    neg_rel = torch.randint(0, num_relations, (batch_size,), device=device)
+    # For negatives, sample relation IDs uniformly from the observed relation set
+    neg_rel = edge_rel_type[
+        torch.randint(0, E, (batch_size,))
+    ].to(device)
+    neg_delta_t = torch.zeros(batch_size, device=device)  # negatives: assume fresh
 
     # Concatenate positive + negative
-    all_src = torch.cat([pos_src, neg_src])
-    all_dst = torch.cat([pos_dst, neg_dst])
-    all_rel = torch.cat([pos_rel, neg_rel])
-    labels  = torch.cat([
+    all_src     = torch.cat([pos_src, neg_src])
+    all_dst     = torch.cat([pos_dst, neg_dst])
+    all_rel     = torch.cat([pos_rel, neg_rel])
+    all_delta_t = torch.cat([pos_delta_t, neg_delta_t])
+    labels      = torch.cat([
         torch.ones(batch_size,  device=device),
         torch.zeros(batch_size, device=device),
     ])
 
-    # Forward pass — no delta_t (snapshot is a static point-in-time graph)
+    # Forward pass — pass real delta_t per batch edge
     scores = model(
         edge_index=edge_index.to(device),
         edge_attr=edge_attr.to(device),
@@ -299,7 +366,7 @@ def train_step(model: ConfidenceWeightedTGN,
         src_nodes=all_src,
         dst_nodes=all_dst,
         relation_ids=all_rel,
-        delta_t_hours=None,  # Static snapshot; all edges at t=0
+        delta_t_hours=delta_t_hours.to(device),   # full-graph delta_t for encode()
     )
 
     loss = F.binary_cross_entropy_with_logits(scores, labels)
@@ -318,6 +385,7 @@ def train_step(model: ConfidenceWeightedTGN,
     return {"loss": loss.item(), "acc": acc}
 
 
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Validation
 # ─────────────────────────────────────────────────────────────────────────────
@@ -326,17 +394,22 @@ def train_step(model: ConfidenceWeightedTGN,
 def validate(model: ConfidenceWeightedTGN,
              train_edge_index:   Tensor,
              train_edge_attr:    Tensor,
+             train_edge_rel:     Tensor,
              train_threshold_w:  Tensor,
+             train_delta_t:      Tensor,
              val_edge_index:     Tensor,
              val_edge_attr:      Tensor,
+             val_edge_rel:       Tensor,
              val_threshold_w:    Tensor,
              num_nodes:          int,
-             num_relations:      int,
              device:             torch.device,
              n_val_batches:      int = 20) -> Dict[str, float]:
     """
-    Validation: encode on full training graph, score validation edges.
+    Validation: encode on full training graph with real delta_t, score validation edges.
     Uses Hits@10 as primary metric (target: >= 70% per Implementation Plan 2B).
+
+    Uses ACTUAL relation IDs from edge_rel_type (not random integers).
+    Uses ACTUAL delta_t_hours computed from edge timestamps (not zero).
 
     NOTE on val_loss divergence:
       Val BCE rises as training progresses because the model learns a sharper
@@ -349,11 +422,12 @@ def validate(model: ConfidenceWeightedTGN,
     if E_val == 0:
         return {"val_loss": 0.0, "val_acc": 0.0, "hits_at_10": 0.0}
 
-    # Encode full graph for stable embeddings
+    # Encode full graph with real temporal decay weights
     h = model.encode(
         edge_index=train_edge_index.to(device),
         edge_attr=train_edge_attr.to(device),
         threshold_weight=train_threshold_w.to(device),
+        delta_t_hours=train_delta_t.to(device),
     )                                                               # [N, hidden_dim]
 
     total_loss = 0.0
@@ -361,16 +435,21 @@ def validate(model: ConfidenceWeightedTGN,
     hits_at_10 = 0.0
     n_total    = 0
 
+    E_train    = train_edge_index.shape[1]
     batch_size = min(256, E_val)
     for _ in range(n_val_batches):
         pos_idx = torch.randint(0, E_val, (batch_size,))
         pos_src = val_edge_index[0, pos_idx].to(device)
         pos_dst = val_edge_index[1, pos_idx].to(device)
-        pos_rel = torch.randint(0, num_relations, (batch_size,), device=device)
+        # Use ACTUAL relation IDs from val edges
+        pos_rel = val_edge_rel[pos_idx].to(device)
 
         neg_src = torch.randint(0, num_nodes, (batch_size,), device=device)
         neg_dst = torch.randint(0, num_nodes, (batch_size,), device=device)
-        neg_rel = torch.randint(0, num_relations, (batch_size,), device=device)
+        # Negatives: sample relation IDs from observed training set distribution
+        neg_rel = train_edge_rel[
+            torch.randint(0, E_train, (batch_size,))
+        ].to(device)
 
         all_src = torch.cat([pos_src, neg_src])
         all_dst = torch.cat([pos_dst, neg_dst])
@@ -409,6 +488,7 @@ def validate(model: ConfidenceWeightedTGN,
     }
 
 
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Main training loop
 # ─────────────────────────────────────────────────────────────────────────────
@@ -427,14 +507,27 @@ def train(args):
     data             = load_pyg_snapshot(SNAPSHOT_PATH)
     label_map        = load_label_map(LABEL_MAP_PATH)
     num_nodes        = data.num_nodes
-    num_relations    = len(label_map)
     edge_index       = data.edge_index
     edge_attr        = data.edge_attr
+    edge_time        = data.edge_time                          # [E] unix seconds — temporal fix
     threshold_weight = load_threshold_weights(MUTATIONS_PATH, edge_index.shape[1])
 
-    # ── Train/val split ────────────────────────────────────────────────────────
+    # ── Relation IDs: prefer snapshot's edge_rel_type, fall back to label_map ──
+    if data.edge_rel_type is not None:
+        edge_rel_type = data.edge_rel_type                    # [E] int64 — relation fix
+        num_relations = int(edge_rel_type.max().item()) + 1
+        print(f"[Train] Using snapshot relation IDs: {num_relations} distinct types")
+    else:
+        # Legacy fallback: assign relation IDs from label_map order
+        num_relations = len(label_map)
+        edge_rel_type = torch.zeros(edge_index.shape[1], dtype=torch.long)
+        print(f"[Train] Fallback: label_map has {num_relations} relation types "
+              "(re-export Phase 1 snapshot to get per-edge relation IDs)")
+
+    # ── Train/val split — genuinely chronological by timestamp ─────────────────
     train_data, val_data = build_train_val_split(
-        edge_index, edge_attr, threshold_weight, val_frac=0.15
+        edge_index, edge_attr, edge_time, edge_rel_type, threshold_weight,
+        val_frac=0.15,
     )
 
     # ── Build model ────────────────────────────────────────────────────────────
@@ -479,8 +572,10 @@ def train(args):
                 model, optimizer, scheduler,
                 train_data["edge_index"],
                 train_data["edge_attr"],
+                train_data["edge_rel_type"],
                 train_data["threshold_weight"],
-                num_nodes, args.batch_size, num_relations,
+                train_data["delta_t_hours"],
+                num_nodes, args.batch_size,
                 device, max_grad_norm=1.0,
             )
             epoch_loss += metrics["loss"]
@@ -501,10 +596,11 @@ def train(args):
             val_metrics = validate(
                 model,
                 train_data["edge_index"], train_data["edge_attr"],
-                train_data["threshold_weight"],
+                train_data["edge_rel_type"], train_data["threshold_weight"],
+                train_data["delta_t_hours"],
                 val_data["edge_index"],   val_data["edge_attr"],
-                val_data["threshold_weight"],
-                num_nodes, num_relations, device,
+                val_data["edge_rel_type"], val_data["threshold_weight"],
+                num_nodes, device,
             )
             
             history["val_epochs"].append(epoch)
@@ -526,6 +622,7 @@ def train(args):
                     "args": vars(args),
                     "num_nodes": num_nodes,
                     "num_relations": num_relations,
+                    "relation_vocab": getattr(data, "relation_vocab", None),
                 }, CHECKPOINT_PATH)
                 val_str += "  [SAVED]"
         else:
